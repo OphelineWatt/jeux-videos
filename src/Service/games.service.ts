@@ -1,13 +1,14 @@
 import type { Game } from "../Model/game.js";
+import { initBindings, subscribe } from "./ui.service.js";
+const DEFAULT_PAGE_SIZE = 20;
 
-const PAGE_SIZE = 12;
-let currentPage = 0;
-
-async function fetchPageFromApi(limit: number, offset: number): Promise<Game[]> {
+async function fetchPageFromApi(limit: number, offset: number, search?: string): Promise<Game[]> {
+  const body: any = { limit, offset };
+  if (search && search.trim()) body.search = String(search).trim();
   const response = await fetch('http://localhost:3000/api/games', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ limit, offset })
+    body: JSON.stringify(body)
   });
 
   if (!response.ok) {
@@ -97,40 +98,20 @@ function renderGames(games: Game[]) {
 }
 
 export async function fetchPage(page: number) {
-  const limit = PAGE_SIZE;
-  const offset = page * PAGE_SIZE;
+  const limit = DEFAULT_PAGE_SIZE;
+  const offset = page * DEFAULT_PAGE_SIZE;
   return await fetchPageFromApi(limit, offset);
 }
 
 export async function initGame() {
+  initBindings();
 
-  const prevBtn = document.getElementById('prev-page');
-  const nextBtn = document.getElementById('next-page');
-
-  async function load(page: number) {
+  // charger les données à chaque changement
+  subscribe(async (s) => {
     clearRow();
-    const games = await fetchPageFromApi(PAGE_SIZE, page * PAGE_SIZE);
+    const games = await fetchPageFromApi(s.pageSize ?? DEFAULT_PAGE_SIZE, (s.currentPage ?? 0) * (s.pageSize ?? DEFAULT_PAGE_SIZE), s.search);
     renderGames(games);
-    const hasNext = games.length === PAGE_SIZE;
-    const prev = document.getElementById('prev-page') as HTMLButtonElement | null;
     const next = document.getElementById('next-page') as HTMLButtonElement | null;
-    const indicator = document.getElementById('page-indicator');
-    if (prev) prev.disabled = page === 0;
-    if (next) next.disabled = !hasNext;
-    if (indicator) indicator.textContent = `Page ${page + 1}`;
-  }
-
-  if (prevBtn) prevBtn.addEventListener('click', async () => {
-    if (currentPage === 0) return;
-    currentPage -= 1;
-    await load(currentPage);
+    if (next) next.disabled = games.length < (s.pageSize ?? DEFAULT_PAGE_SIZE);
   });
-
-  if (nextBtn) nextBtn.addEventListener('click', async () => {
-    currentPage += 1;
-    await load(currentPage);
-  });
-
- 
-  await load(currentPage);
 }

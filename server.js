@@ -22,14 +22,20 @@ app.post('/api/games', async (req, res) => {
     const tokenData = await tokenRes.json();
     const token = tokenData.access_token;
 
-    // Support pagination: client may send `limit` and `offset` or a full `query` string.
     const limit = Number.isInteger(req.body.limit) ? req.body.limit : undefined;
     const offset = Number.isInteger(req.body.offset) ? req.body.offset : undefined;
     let query = req.body.query;
+    const search = typeof req.body.search === 'string' && req.body.search.trim() ? String(req.body.search).trim() : undefined;
     if (!query) {
-      // Build a default query with optional limit/offset
+      // Construire une requête par défaut avec recherche/limit/offset optionnels
       const fields = 'fields name, rating, summary, cover.url, cover.image_id, genres;';
-      const parts = [fields];
+      const parts = [];
+      if (search) {
+        // échapper les guillemets doubles dans le terme de recherche
+        const escaped = search.replace(/"/g, '\\"');
+        parts.push(`search "${escaped}";`);
+      }
+      parts.push(fields);
       if (limit !== undefined) parts.push(`limit ${limit};`);
       if (offset !== undefined) parts.push(`offset ${offset};`);
       query = parts.join(' ');
@@ -52,9 +58,9 @@ app.post('/api/games', async (req, res) => {
 
     const data = await igdbRes.json();
 
-    // If games include genre ids, fetch genre names and map them
+    // Si les jeux contiennent des ids de genres, récupérer les noms et les mapper
     try {
-      // collect unique genre ids
+      // récupérer les ids de genres uniques
       const genreIds = Array.from(new Set((data || []).flatMap(g => (g.genres || []).filter(id => typeof id === 'number'))));
       if (genreIds.length > 0) {
         const genresQuery = `fields id,name; where id = (${genreIds.join(',')});`;
@@ -70,6 +76,7 @@ app.post('/api/games', async (req, res) => {
         if (genresRes.ok) {
           const genresData = await genresRes.json();
           const genreMap = new Map(genresData.map(g => [g.id, g.name]));
+          // remplacer les ids par des objets {id, name}
           data.forEach(game => {
             if (Array.isArray(game.genres)) {
               game.genres = game.genres.map(id => ({ id, name: genreMap.get(id) || null }));
@@ -78,7 +85,7 @@ app.post('/api/games', async (req, res) => {
         }
       }
     } catch (err) {
-      console.warn('Failed to fetch/Map genres', err);
+      console.warn('Échec de la récupération/du mapping des genres', err);
     }
 
     res.json(data);
