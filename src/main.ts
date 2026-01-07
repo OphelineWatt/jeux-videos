@@ -1,5 +1,3 @@
-import { initGameController } from "./Controller/games.controller.js";
+import { initGame } from "./Service/games.service.js";
 
-initGameController();
-
-
+initGame();
